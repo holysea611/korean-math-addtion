@@ -1,0 +1,6 @@
+import pyautogui
+pyautogui.position()
+
+import pyautogui
+import time
+pyautogui.position()
