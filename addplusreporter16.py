@@ -21,9 +21,9 @@ class JosaCorrector:
             '이상', '이하', '이내', '이외', '미만', '초과',
             '이은', '이을', '이어', '이으므로', '이어진', '이루어진', '이루는', '이동', '이용',
             '없는', '있는', '없고', '있고', '없이', '있어', '없어',
-            # 지시어 보호 패턴 (추가됨)
+            # 지시어 보호 패턴
             '이 점', '이 선', '이 값', '이 식', '이 경우', '이 때', '이 확률', '이 시행', '이 도형', '이 문제',
-            '이 등식', '이 방정식', '이 부등식', '이 함수', '이 그래프', '이 조건', '이 직선',
+            '이 등식', '이 방정식', '이 부등식', '이 함수', '이 그래프', '이 조건', '이 직선'
             '그 점', '그 선', '그 값', '그 식', '그 경우', '그 때',
             '저 점'
         ]
@@ -139,7 +139,10 @@ class JosaCorrector:
                 if unit_content in ['m', 'cm', 'mm', 'km']: return "미터"
             return "제곱"
 
+        # ★ 수정: 괄호로 끝나는 경우 내부의 마지막 글자 추출 로직 강화
         if final_term.endswith(')'):
+             # 괄호 안의 내용 중 가장 마지막에 있는 숫자나 문자를 찾음
+             # 예: (0, 0, 0) -> 0
              m = re.search(r'([가-힣a-zA-Z0-9])\)+$', final_term)
              if m: return m.group(1)
 
@@ -187,6 +190,8 @@ class JosaCorrector:
         for has_b, no_b in self.particle_pairs:
             if original_p.startswith(has_b) or original_p.startswith(no_b):
                 if has_b == '으로':
+                    # '으로'는 받침이 있고(has_batchim), 그 받침이 'ㄹ'이 아닐 때(not is_rieul)만 씀
+                    # 0(영) -> 받침 있음(ㅇ), ㄹ 아님 -> '으로' (Correct)
                     stem = '으로' if (has_batchim and not is_rieul) else '로'
                 else:
                     stem = has_b if has_batchim else no_b
@@ -388,7 +393,7 @@ st.set_page_config(page_title="수학 문제 통합 교정기", layout="wide")
 st.title("✨ 수학 문제 통합 교정기")
 st.markdown("""
 **1. 수식 조사 호응:** LaTeX 수식 뒤의 조사를 교정합니다. (쉼표 뒤 '이면' 유지)  
-**2. 한글 맞춤법:** '이 등식이' 에서 '이'를 조사처리하는 오류를 수정했습니다.
+**2. 한글 맞춤법:** '몇 개인가?' 처럼 의문형 어미를 조사로 오인하는 오류를 수정했습니다.
 """)
 
 col1, col2 = st.columns([1, 1])
