@@ -23,7 +23,8 @@ class JosaCorrector:
             '없는', '있는', '없고', '있고', '없이', '있어', '없어',
             # 지시어 보호 패턴
             '이 점', '이 선', '이 값', '이 식', '이 경우', '이 때', '이 확률', '이 시행', '이 도형', '이 문제',
-            '이 등식', '이 방정식', '이 부등식', '이 함수', '이 그래프', '이 조건', '이 직선'
+            '이 등식', '이 방정식', '이 부등식', '이 함수', '이 그래프', '이 조건', '이 직선', '이 곡선', '이 영역',
+            '이 삼각형', '이 타원', '이 원', '이 사각형', '이 다각형', '이 구', '이 원뿔', '이 원기둥', '이 수열',
             '그 점', '그 선', '그 값', '그 식', '그 경우', '그 때',
             '저 점'
         ]
@@ -101,6 +102,11 @@ class JosaCorrector:
 
     def find_target(self, formula_str):
         simplified = self.simplify_formula(formula_str)
+        
+        # ★ 수정: 공백 관련 LaTeX 명령어 제거 ( \, \; \quad \  등)
+        # \right)\, 와 같은 경우를 처리하기 위함
+        simplified = re.sub(r'\\[,;! ]|\\quad|\\qquad', '', simplified)
+        
         clean = re.sub(r'\s+', '', simplified)
         
         masked_text = clean
@@ -139,10 +145,7 @@ class JosaCorrector:
                 if unit_content in ['m', 'cm', 'mm', 'km']: return "미터"
             return "제곱"
 
-        # ★ 수정: 괄호로 끝나는 경우 내부의 마지막 글자 추출 로직 강화
         if final_term.endswith(')'):
-             # 괄호 안의 내용 중 가장 마지막에 있는 숫자나 문자를 찾음
-             # 예: (0, 0, 0) -> 0
              m = re.search(r'([가-힣a-zA-Z0-9])\)+$', final_term)
              if m: return m.group(1)
 
@@ -190,8 +193,6 @@ class JosaCorrector:
         for has_b, no_b in self.particle_pairs:
             if original_p.startswith(has_b) or original_p.startswith(no_b):
                 if has_b == '으로':
-                    # '으로'는 받침이 있고(has_batchim), 그 받침이 'ㄹ'이 아닐 때(not is_rieul)만 씀
-                    # 0(영) -> 받침 있음(ㅇ), ㄹ 아님 -> '으로' (Correct)
                     stem = '으로' if (has_batchim and not is_rieul) else '로'
                 else:
                     stem = has_b if has_batchim else no_b
