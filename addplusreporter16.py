@@ -103,8 +103,7 @@ class JosaCorrector:
     def find_target(self, formula_str):
         simplified = self.simplify_formula(formula_str)
         
-        # 1. 공백 관련 LaTeX 명령어 제거 (강력하게)
-        # \, \; \: \! \quad \qquad 및 일반 공백 제거
+        # 1. 공백 관련 LaTeX 명령어 제거
         simplified = re.sub(r'\\[,;:! ]|\\quad|\\qquad', '', simplified)
         clean = re.sub(r'\s+', '', simplified)
         
@@ -132,8 +131,6 @@ class JosaCorrector:
                 if placeholder in final_term:
                     final_term = final_term.replace(placeholder, "{" + content + "}")
 
-        # 3. 복원 후 다시 한 번 끝부분의 공백 명령어 제거 (안전장치)
-        final_term = re.sub(r'\\[,;:! ]+$', '', final_term)
         final_term = final_term.rstrip('\\').strip()
 
         if r'\degree' in final_term or r'^\circ' in final_term: return "도"
@@ -147,39 +144,29 @@ class JosaCorrector:
                 if unit_content in ['m', 'cm', 'mm', 'km']: return "미터"
             return "제곱"
 
-        # ★ 수정: 밑첨자(_) 처리 로직 강화
-        if "_" in final_term:
-            # 1. 중괄호로 감싸진 밑첨자: _{...}
-            # 예: O_{1}, O_{\,1} 등 공백 명령어가 섞여 있을 수 있음
-            sub_match = re.search(r'_\{([^}]+)\}\s*$', final_term)
-            if sub_match:
-                content = sub_match.group(1)
-                # 내용 내부의 공백 명령어 제거
-                content = re.sub(r'\\[,;:! ]|\\quad|\\qquad', '', content)
-                content = content.strip()
-                if content:
-                    m = re.search(r'([가-힣a-zA-Z0-9])\s*$', content)
-                    if m: return m.group(1)
-            
-            # 2. 중괄호 없는 밑첨자: _1, _a
-            # 예: O_1, O_\,1 (공백 명령어가 _ 뒤에 붙을 수도 있음)
-            # _ 뒤에 공백 명령어가 오고 그 뒤에 숫자가 오는 경우 처리
-            # 예: _\,1 -> 1
-            sub_match_simple = re.search(r'_((?:\\[a-zA-Z]+|.)*?)([a-zA-Z0-9])\s*$', final_term)
-            if sub_match_simple:
-                return sub_match_simple.group(2)
-
-        if final_term.endswith(')'):
-             m = re.search(r'([가-힣a-zA-Z0-9])\)+$', final_term)
-             if m: return m.group(1)
-
+        # ★ 수정: 단위(UNIT) 체크를 먼저 수행
         mathrm_match = re.search(r'\\mathrm\{([a-zA-Z]+)\}', final_term)
-        if mathrm_match: return f"UNIT:{mathrm_match.group(1)}"
+        if mathrm_match:
+            # 단위인지 확인 (m, cm, kg 등)
+            unit_candidate = mathrm_match.group(1)
+            if unit_candidate in self.unit_batchim_dict:
+                return f"UNIT:{unit_candidate}"
+            # 단위가 아니라면(예: 점 O, 점 A 등), 일반 텍스트로 취급하여 아래 로직으로 넘어감
 
-        text_only = re.sub(r'\\[a-zA-Z]+|[{}]|[()\[\]]|[\.,]', '', final_term)
-        text_only = text_only.replace('\\', '').strip() 
+        # ★ 최후의 수단: 모든 LaTeX 명령어를 제거하고 순수 텍스트만 남김
+        # 1. \mathrm, \text 등 명령어 제거
+        text_only = re.sub(r'\\[a-zA-Z]+', '', final_term)
+        # 2. 중괄호, 괄호, 밑첨자(_), 위첨자(^) 등 특수문자 제거 (단, 숫자와 알파벳은 남김)
+        # 밑첨자(_) 뒤의 숫자는 남겨야 하므로 _는 공백으로 치환하거나 제거
+        text_only = text_only.replace('_', '').replace('^', '')
+        text_only = re.sub(r'[{}[\](),;:!]', '', text_only)
+        text_only = text_only.strip()
+
+        # 3. 남은 텍스트의 마지막 글자 반환
+        if text_only:
+            return text_only[-1]
         
-        return text_only[-1] if text_only else ""
+        return ""
 
     def get_correct_p(self, target, original_p):
         for word in self.protected_words:
