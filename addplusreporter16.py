@@ -23,8 +23,7 @@ class JosaCorrector:
             '없는', '있는', '없고', '있고', '없이', '있어', '없어',
             # 지시어 보호 패턴
             '이 점', '이 선', '이 값', '이 식', '이 경우', '이 때', '이 확률', '이 시행', '이 도형', '이 문제',
-            '이 등식', '이 방정식', '이 부등식', '이 함수', '이 그래프', '이 조건', '이 직선', '이 곡선', '이 영역',
-            '이 삼각형', '이 타원', '이 원', '이 사각형', '이 다각형', '이 구', '이 원뿔', '이 원기둥', '이 수열',
+            '이 등식', '이 방정식', '이 부등식', '이 함수', '이 그래프', '이 조건',
             '그 점', '그 선', '그 값', '그 식', '그 경우', '그 때',
             '저 점'
         ]
@@ -103,8 +102,7 @@ class JosaCorrector:
     def find_target(self, formula_str):
         simplified = self.simplify_formula(formula_str)
         
-        # ★ 수정: 공백 관련 LaTeX 명령어 제거 ( \, \; \quad \  등)
-        # \right)\, 와 같은 경우를 처리하기 위함
+        # 공백 관련 LaTeX 명령어 제거
         simplified = re.sub(r'\\[,;! ]|\\quad|\\qquad', '', simplified)
         
         clean = re.sub(r'\s+', '', simplified)
@@ -144,6 +142,23 @@ class JosaCorrector:
                 unit_content = mathrm_match.group(1)
                 if unit_content in ['m', 'cm', 'mm', 'km']: return "미터"
             return "제곱"
+
+        # ★ 수정: 밑첨자(_) 처리 로직 추가
+        # 예: O_1 -> 1, A_{12} -> 2
+        if "_" in final_term:
+            # 마지막 부분이 밑첨자인지 확인
+            # 1. 중괄호로 감싸진 경우: _{...}
+            sub_match = re.search(r'_\{([^}]+)\}$', final_term)
+            if sub_match:
+                content = sub_match.group(1)
+                # 내용의 마지막 글자 반환 (예: 12 -> 2)
+                m = re.search(r'([가-힣a-zA-Z0-9])\s*$', content)
+                if m: return m.group(1)
+            
+            # 2. 중괄호 없는 경우: _1, _a
+            sub_match_simple = re.search(r'_([a-zA-Z0-9])$', final_term)
+            if sub_match_simple:
+                return sub_match_simple.group(1)
 
         if final_term.endswith(')'):
              m = re.search(r'([가-힣a-zA-Z0-9])\)+$', final_term)
