@@ -23,7 +23,8 @@ class JosaCorrector:
             '없는', '있는', '없고', '있고', '없이', '있어', '없어',
             # 지시어 보호 패턴
             '이 점', '이 선', '이 값', '이 식', '이 경우', '이 때', '이 확률', '이 시행', '이 도형', '이 문제',
-            '이 등식', '이 방정식', '이 부등식', '이 함수', '이 그래프', '이 조건',
+            '이 등식', '이 방정식', '이 부등식', '이 함수', '이 그래프', '이 조건', '이 직선', '이 곡선', '이 영역',
+            '이 삼각형', '이 타원', '이 원', '이 사각형', '이 다각형', '이 구', '이 원뿔', '이 원기둥', '이 수열',
             '그 점', '그 선', '그 값', '그 식', '그 경우', '그 때',
             '저 점'
         ]
@@ -124,6 +125,7 @@ class JosaCorrector:
         parts = re.split(split_pattern, masked_text)
         final_term = parts[-1] if parts else masked_text
 
+        # ★ 중요: 모든 보호된 중괄호 내용을 먼저 복원
         while "@BRACE" in final_term:
             for i, content in enumerate(braces_content):
                 placeholder = f"@BRACE{i}@"
@@ -143,20 +145,22 @@ class JosaCorrector:
                 if unit_content in ['m', 'cm', 'mm', 'km']: return "미터"
             return "제곱"
 
-        # ★ 수정: 밑첨자(_) 처리 로직 추가
-        # 예: O_1 -> 1, A_{12} -> 2
+        # ★ 수정: 밑첨자(_) 처리 로직 강화 (복원된 final_term 기준)
         if "_" in final_term:
-            # 마지막 부분이 밑첨자인지 확인
-            # 1. 중괄호로 감싸진 경우: _{...}
-            sub_match = re.search(r'_\{([^}]+)\}$', final_term)
+            # 1. 중괄호로 감싸진 밑첨자: _{...}
+            # 탐욕적이지 않게 마지막 _{...}를 찾음
+            sub_match = re.search(r'_\{([^}]+)\}\s*$', final_term)
             if sub_match:
                 content = sub_match.group(1)
-                # 내용의 마지막 글자 반환 (예: 12 -> 2)
-                m = re.search(r'([가-힣a-zA-Z0-9])\s*$', content)
-                if m: return m.group(1)
+                # 내용의 마지막 글자 (공백 제거 후)
+                content = content.strip()
+                if content:
+                    # 마지막 글자가 한글/영문/숫자이면 반환
+                    m = re.search(r'([가-힣a-zA-Z0-9])\s*$', content)
+                    if m: return m.group(1)
             
-            # 2. 중괄호 없는 경우: _1, _a
-            sub_match_simple = re.search(r'_([a-zA-Z0-9])$', final_term)
+            # 2. 중괄호 없는 밑첨자: _1, _a
+            sub_match_simple = re.search(r'_([a-zA-Z0-9])\s*$', final_term)
             if sub_match_simple:
                 return sub_match_simple.group(1)
 
