@@ -136,15 +136,10 @@ class JosaCorrector:
 
         final_term = final_term.rstrip('\\').strip()
 
-        # ★ 수정: cases 환경 처리 (마지막 내용 추출)
+        # cases 환경 처리
         if r'\end{cases}' in final_term:
-            # \end{cases} 앞의 내용을 찾음
-            # 보통 줄바꿈(\\)이나 &로 구분되므로, 가장 마지막 텍스트를 찾아야 함
             before_end = final_term.split(r'\end{cases}')[0]
-            # 공백 및 줄바꿈 제거 후 마지막 부분 추출
-            before_end = before_end.strip()
-            # 마지막 글자 추출을 위해 재귀적으로 처리하거나 단순화
-            final_term = before_end
+            final_term = before_end.strip()
 
         if final_term.endswith("'") or r'\prime' in final_term:
             return "프라임"
@@ -152,22 +147,29 @@ class JosaCorrector:
         if r'\degree' in final_term or r'^\circ' in final_term: return "도"
         
         # ★ 수정: 단위의 제곱 처리 (m^2 -> 제곱미터 -> 터 -> 받침 없음)
+        # W/m^2 처럼 복합 단위일 경우, 마지막 부분(m^2)만 떼어내서 확인해야 함
+        # 1. 마지막 덩어리 추출 (공백이나 연산자로 분리된 마지막 부분)
+        # 여기서는 이미 split_pattern으로 분리되었지만, / (나눗셈)은 분리되지 않았을 수 있음
+        if '/' in final_term:
+            final_term = final_term.split('/')[-1]
+
         if "^" in final_term:
             if "C" in final_term: return "여집합"
             base_part = final_term.split('^')[0]
             
-            # 단위인지 확인
+            # 단위인지 확인 (\mathrm{m}, m 등)
+            # \mathrm{...} 패턴 확인
             mathrm_match = re.search(r'\\mathrm\{([a-zA-Z]+)\}', base_part)
             if mathrm_match:
                 unit_content = mathrm_match.group(1)
-                # m^2, cm^2, km^2 등은 '제곱미터'로 읽으므로 끝글자는 '터' (받침 없음)
-                if unit_content in ['m', 'cm', 'mm', 'km']: 
-                    return "미터" # 받침 없음
-                # s^2 -> 제곱초 -> 초 (받침 없음)
-                if unit_content == 's' or unit_content == 'sec':
-                    return "초" # 받침 없음
+                if unit_content in ['m', 'cm', 'mm', 'km']: return "미터" # 받침 없음
+                if unit_content in ['s', 'sec']: return "초" # 받침 없음
             
-            # 단위가 아니면 일반적인 제곱 (x^2 -> 엑스 제곱 -> 받침 있음)
+            # \mathrm 없이 그냥 m^2 인 경우도 고려 (드물지만)
+            # 하지만 보통 수식에서 변수 m과 단위 m을 구분하기 위해 \mathrm을 씀.
+            # 만약 \mathrm이 없다면 변수 m의 제곱 -> 엠 제곱 -> 받침 있음이 맞음.
+            # 여기서는 \mathrm이 있는 경우만 '제곱미터'로 처리.
+            
             return "제곱"
 
         if "_" in final_term:
