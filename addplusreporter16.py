@@ -13,7 +13,7 @@ class JosaCorrector:
         self.unit_batchim_dict = self._init_unit_batchim_dict()
         self.particle_pairs = self._init_particle_pairs()
         
-        # [수식 보호] 조사가 아닌 단어(동사/형용사 활용형) 보호 목록
+        # [수식 보호] 조사가 아닌 단어(동사/형용사 활용형) 및 지시대명사 보호 목록
         self.protected_words = [
             '이다', '입니다', '이므로', '이며', '이고', '이나', '이면서', '이지만', '이어서',
             '이때', '이어야', '가지',
@@ -26,7 +26,7 @@ class JosaCorrector:
             '이 등식', '이 방정식', '이 부등식', '이 함수', '이 그래프', '이 조건', '이 직선', '이 곡선', '이 영역',
             '이 삼각형', '이 타원', '이 원', '이 사각형', '이 다각형', '이 구', '이 원뿔', '이 원기둥', '이 수열',
             '그 점', '그 선', '그 값', '그 식', '그 경우', '그 때',
-            '저 점'
+            '저 점', '이 배터리', '그 배터리', '저 배터리'
         ]
 
     def _init_batchim_dict(self):
@@ -43,18 +43,18 @@ class JosaCorrector:
         return d
 
     def _init_unit_batchim_dict(self):
-        # ★ 수정: 전력량 단위(Wh, kWh 등) 추가
+        # ★ 수정: KWh 등 대소문자 변형 단위 모두 추가
         return {
             'm': False, 'cm': False, 'mm': False, 'km': False,
             'g': True, 'kg': True, 'mg': True,
             'l': False, 'L': False, 'mL': False,
-            'A': False, 'V': False, 'W': False, 'kW': False, 'MW': False,
-            'Wh': False, 'kWh': False, 'MWh': False, 'GWh': False,
+            'A': False, 'V': False, 'W': False, 'kW': False, 'KW': False, 'MW': False, 'GW': False,
+            'Wh': False, 'kWh': False, 'KWh': False, 'MWh': False, 'GWh': False,
             'Hz': False,
             'deg': False, 'degree': False,
             'N': True,
-            'min': True, # 민(min) -> 받침 있음
-            'sec': False # 세크(sec) -> 받침 없음
+            'min': True, 
+            'sec': False 
         }
 
     def _init_particle_pairs(self):
@@ -149,27 +149,30 @@ class JosaCorrector:
         if '/' in final_term:
             final_term = final_term.split('/')[-1]
 
-        # ★ 수정: 지수(^)가 수식 중간(괄호 안 등)에 있을 때 전체를 '제곱'으로 인식하는 오류 수정
+        # ★ 수정: 지수(^)가 수식의 맨 끝에 있을 때만 "제곱"으로 인식하도록 정교화
         last_caret = final_term.rfind('^')
         if last_caret != -1:
             after_caret = final_term[last_caret+1:].strip()
-            # 뒤에 붙은 괄호나 구두점 제거
-            after_caret_clean = re.sub(r'[\)\}\]\s,;:!]+$', '', after_caret)
+            after_caret_clean = re.sub(r'[\s,;:!]+$', '', after_caret)
             
             is_end_with_exponent = False
-            # 지수가 수식의 맨 끝을 장식하는지 확인 (예: x^2, x^{2})
             if after_caret_clean.startswith('{') and after_caret_clean.endswith('}'):
-                is_end_with_exponent = True
+                # 괄호가 완벽하게 하나의 그룹으로 끝나는지 확인
+                content, end_idx = self.get_balanced(after_caret_clean, 0)
+                if end_idx == len(after_caret_clean):
+                    is_end_with_exponent = True
             elif len(after_caret_clean) == 1:
+                is_end_with_exponent = True
+            elif re.match(r'^[a-zA-Z0-9]+$', after_caret_clean):
                 is_end_with_exponent = True
                 
             if is_end_with_exponent:
                 if "C" in after_caret_clean: return "여집합"
                 
                 base_part = final_term[:last_caret]
-                mathrm_match = re.search(r'\\mathrm\{([a-zA-Z]+)\}', base_part)
-                if mathrm_match:
-                    unit_content = mathrm_match.group(1)
+                text_match = re.search(r'\\(?:mathrm|text|rm|bf|it)\{([a-zA-Z]+)\}', base_part)
+                if text_match:
+                    unit_content = text_match.group(1)
                     if unit_content in ['m', 'cm', 'mm', 'km']: return "미터"
                     if unit_content in ['s', 'sec']: return "초"
                 return "제곱"
@@ -192,9 +195,15 @@ class JosaCorrector:
              m = re.search(r'([가-힣a-zA-Z0-9])\)+$', final_term)
              if m: return m.group(1)
 
-        mathrm_match = re.search(r'\\mathrm\{([a-zA-Z]+)\}', final_term)
-        if mathrm_match:
-            unit_candidate = mathrm_match.group(1)
+        # ★ 수정: \mathrm{KWh}, \text{KWh} 등 다양한 매크로 및 매크로 없는 단위(KWh) 모두 인식
+        text_match = re.search(r'\\(?:mathrm|text|rm|bf|it)\{([a-zA-Z]+)\}', final_term)
+        if text_match:
+            unit_candidate = text_match.group(1)
+            return f"UNIT:{unit_candidate}"
+            
+        m = re.search(r'([a-zA-Z]+)$', final_term)
+        if m:
+            unit_candidate = m.group(1)
             if unit_candidate in self.unit_batchim_dict:
                 return f"UNIT:{unit_candidate}"
 
@@ -277,12 +286,12 @@ class JosaCorrector:
             pre, s1, delim, formula, gap, particle = match.groups()
             formula_clean = formula.replace('\\\\', '\\')
             
-            # ★ 수정: 수식이 비어있거나 공백/줄바꿈만 있는 경우 (예: $\n$) 무시
-            if not formula_clean.strip():
+            # ★ 수정: 수식이 비어있거나 줄바꿈(\n), 백슬래시(\\), 공백(\quad) 등 포매팅 기호만 있는 경우 무시
+            fc_stripped = formula_clean.strip()
+            if not fc_stripped or fc_stripped in ['\\', '\\\\', '\\quad', '\\qquad', '\\,']:
                 return match.group(0)
                 
-            # ★ 수정: 수식과 글자 사이에 줄바꿈이 있는 경우 (예: [해설]\n이 배터리를)
-            # 이는 조사가 아니라 새로운 문장의 시작(지시대명사 등)이므로 무시
+            # 수식과 글자 사이에 줄바꿈이 있는 경우 무시 (새로운 문장의 시작)
             if '\n' in gap or '\r' in gap:
                 return match.group(0)
 
