@@ -23,9 +23,8 @@ class JosaCorrector:
             '없는', '있는', '없고', '있고', '없이', '있어', '없어',
             # 지시어 보호 패턴
             '이 점', '이 선', '이 값', '이 식', '이 경우', '이 때', '이 확률', '이 시행', '이 도형', '이 문제',
-            '이 등식', '이 방정식', '이 부등식', '이 함수', '이 그래프', '이 조건','이 직선', '이 곡선', '이 영역',
-            '이 삼각형', '이 타원', '이 원', '이 사각형', '이 다각형', '이 구', '이 원뿔', '이 원기둥',
-            '이 포물선', '이 수열',
+            '이 등식', '이 방정식', '이 부등식', '이 함수', '이 그래프', '이 조건', '이 직선', '이 곡선', '이 영역',
+            '이 삼각형', '이 타원', '이 원', '이 사각형', '이 다각형', '이 구', '이 원뿔', '이 원기둥', '이 수열',
             '그 점', '그 선', '그 값', '그 식', '그 경우', '그 때',
             '저 점'
         ]
@@ -36,7 +35,7 @@ class JosaCorrector:
             'l': True, 'm': True, 'n': True, 'r': True, 
             'L': True, 'M': True, 'N': True, 'R': True, 
             '제곱': True, '여집합': True, '바': False,
-            '프라임': True  # 프라임(임) -> 받침 있음
+            '프라임': True
         }
         for c in "ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎ": d[c] = True
         for ch in '2459AaBbCcDdEeFfGgHhIiJjKkOoPpQqSsTtUuVvWwXxeYyZz':
@@ -50,7 +49,9 @@ class JosaCorrector:
             'l': False, 'L': False, 'mL': False,
             'A': False, 'V': False, 'W': False, 'Hz': False,
             'deg': False, 'degree': False,
-            'N': True
+            'N': True,
+            'min': True, # 민(min) -> 받침 있음
+            'sec': False # 세크(sec) -> 받침 없음
         }
 
     def _init_particle_pairs(self):
@@ -135,20 +136,38 @@ class JosaCorrector:
 
         final_term = final_term.rstrip('\\').strip()
 
-        # ★ 수정: 프라임(') 처리 로직 추가
-        # A', A'', A^{\prime} 등
+        # ★ 수정: cases 환경 처리 (마지막 내용 추출)
+        if r'\end{cases}' in final_term:
+            # \end{cases} 앞의 내용을 찾음
+            # 보통 줄바꿈(\\)이나 &로 구분되므로, 가장 마지막 텍스트를 찾아야 함
+            before_end = final_term.split(r'\end{cases}')[0]
+            # 공백 및 줄바꿈 제거 후 마지막 부분 추출
+            before_end = before_end.strip()
+            # 마지막 글자 추출을 위해 재귀적으로 처리하거나 단순화
+            final_term = before_end
+
         if final_term.endswith("'") or r'\prime' in final_term:
             return "프라임"
 
         if r'\degree' in final_term or r'^\circ' in final_term: return "도"
         
+        # ★ 수정: 단위의 제곱 처리 (m^2 -> 제곱미터 -> 터 -> 받침 없음)
         if "^" in final_term:
             if "C" in final_term: return "여집합"
             base_part = final_term.split('^')[0]
+            
+            # 단위인지 확인
             mathrm_match = re.search(r'\\mathrm\{([a-zA-Z]+)\}', base_part)
             if mathrm_match:
                 unit_content = mathrm_match.group(1)
-                if unit_content in ['m', 'cm', 'mm', 'km']: return "미터"
+                # m^2, cm^2, km^2 등은 '제곱미터'로 읽으므로 끝글자는 '터' (받침 없음)
+                if unit_content in ['m', 'cm', 'mm', 'km']: 
+                    return "미터" # 받침 없음
+                # s^2 -> 제곱초 -> 초 (받침 없음)
+                if unit_content == 's' or unit_content == 'sec':
+                    return "초" # 받침 없음
+            
+            # 단위가 아니면 일반적인 제곱 (x^2 -> 엑스 제곱 -> 받침 있음)
             return "제곱"
 
         if "_" in final_term:
@@ -207,10 +226,10 @@ class JosaCorrector:
                 last_char = real_unit[-1]
                 has_batchim = self.batchim_dict.get(last_char, False)
         
-        elif target == "프라임": # 프라임 -> 받침 있음
-            has_batchim = True
-            
-        elif target == "미터": has_batchim = False
+        elif target == "프라임": has_batchim = True
+        elif target == "미터": has_batchim = False # 제곱미터 -> 터 -> 받침 없음
+        elif target == "초": has_batchim = False # 제곱초 -> 초 -> 받침 없음
+        
         else:
             if target in self.batchim_dict: has_batchim = self.batchim_dict[target]
             elif len(target) == 1 and '가' <= target <= '힣': has_batchim = (ord(target) - 0xAC00) % 28 > 0
@@ -254,6 +273,9 @@ class JosaCorrector:
             pre, s1, delim, formula, gap, particle = match.groups()
             formula_clean = formula.replace('\\\\', '\\')
             
+            if ',' in gap:
+                return match.group(0)
+
             p_match = re.search(r'[가-힣]+', particle)
             match_start = match.start()
             match_end = match.end()
