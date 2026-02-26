@@ -23,7 +23,7 @@ class JosaCorrector:
             '없는', '있는', '없고', '있고', '없이', '있어', '없어',
             # 지시어 보호 패턴
             '이 점', '이 선', '이 값', '이 식', '이 경우', '이 때', '이 확률', '이 시행', '이 도형', '이 문제',
-            '이 등식', '이 방정식', '이 부등식', '이 함수', '이 그래프', '이 조건','이 직선', '이 곡선', '이 영역',
+            '이 등식', '이 방정식', '이 부등식', '이 함수', '이 그래프', '이 조건',  '이 직선', '이 곡선', '이 영역',
             '이 삼각형', '이 타원', '이 원', '이 사각형', '이 다각형', '이 구', '이 원뿔', '이 원기둥', '이 수열',
             '그 점', '그 선', '그 값', '그 식', '그 경우', '그 때',
             '저 점', '이 배터리', '그 배터리', '저 배터리'
@@ -140,9 +140,10 @@ class JosaCorrector:
             before_end = final_term.split(r'\end{cases}')[0]
             final_term = before_end.strip()
 
-        # ★ 수정: 프라임 기호 및 OCR 오류(,,) 완벽 인식
-        # 수식 끝에 작은따옴표('), 스마트따옴표(’), 쉼표 2개 이상(,,)이 오거나 \prime이 포함된 경우
-        if re.search(r"['’]+$", final_term) or re.search(r",{2,}$", final_term) or r'\prime' in final_term:
+        # ★ 핵심 수정: 프라임 기호 완벽 인식 (닫는 괄호 무시)
+        # 수식 끝에 닫는 괄호(}, ), ])가 있을 수 있으므로 이를 임시로 제거하고 끝부분 검사
+        clean_term_for_prime = re.sub(r'[\}\)\]\s]+$', '', final_term)
+        if re.search(r"['’]+$", clean_term_for_prime) or re.search(r",{2,}$", clean_term_for_prime) or clean_term_for_prime.endswith('prime'):
             return "프라임"
 
         if r'\degree' in final_term or r'^\circ' in final_term: return "도"
@@ -261,7 +262,6 @@ class JosaCorrector:
         return original_p
 
     def clean_latex_for_human(self, latex):
-        # ★ 수정: Report 대상 열에 출력될 때 \, \; \quad 등 공백 매크로를 깔끔하게 제거
         text = re.sub(r'\\[,;:! ]|\\quad|\\qquad', '', latex)
         text = re.sub(r'\\(left|right|mathrm|text|bf|it)', '', text)
         text = text.replace('{', '').replace('}', '').replace('\\', '')
@@ -288,6 +288,9 @@ class JosaCorrector:
             
             fc_stripped = formula_clean.strip()
             if not fc_stripped or fc_stripped in ['\\', '\\\\', '\\quad', '\\qquad', '\\,']:
+                return match.group(0)
+                
+            if re.search(r'[,.;:]+$', fc_stripped):
                 return match.group(0)
                 
             if '\n' in gap or '\r' in gap:
