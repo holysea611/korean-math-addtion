@@ -23,7 +23,7 @@ class JosaCorrector:
             '없는', '있는', '없고', '있고', '없이', '있어', '없어',
             # 지시어 보호 패턴
             '이 점', '이 선', '이 값', '이 식', '이 경우', '이 때', '이 확률', '이 시행', '이 도형', '이 문제',
-            '이 등식', '이 방정식', '이 부등식', '이 함수', '이 그래프', '이 조건', '이 직선', '이 곡선', '이 영역',
+            '이 등식', '이 방정식', '이 부등식', '이 함수', '이 그래프', '이 조건','이 직선', '이 곡선', '이 영역',
             '이 삼각형', '이 타원', '이 원', '이 사각형', '이 다각형', '이 구', '이 원뿔', '이 원기둥', '이 수열',
             '그 점', '그 선', '그 값', '그 식', '그 경우', '그 때',
             '저 점', '이 배터리', '그 배터리', '저 배터리'
@@ -43,7 +43,6 @@ class JosaCorrector:
         return d
 
     def _init_unit_batchim_dict(self):
-        # ★ 수정: KWh 등 대소문자 변형 단위 모두 추가
         return {
             'm': False, 'cm': False, 'mm': False, 'km': False,
             'g': True, 'kg': True, 'mg': True,
@@ -141,7 +140,9 @@ class JosaCorrector:
             before_end = final_term.split(r'\end{cases}')[0]
             final_term = before_end.strip()
 
-        if final_term.endswith("'") or r'\prime' in final_term:
+        # ★ 수정: 프라임 기호 및 OCR 오류(,,) 완벽 인식
+        # 수식 끝에 작은따옴표('), 스마트따옴표(’), 쉼표 2개 이상(,,)이 오거나 \prime이 포함된 경우
+        if re.search(r"['’]+$", final_term) or re.search(r",{2,}$", final_term) or r'\prime' in final_term:
             return "프라임"
 
         if r'\degree' in final_term or r'^\circ' in final_term: return "도"
@@ -149,7 +150,6 @@ class JosaCorrector:
         if '/' in final_term:
             final_term = final_term.split('/')[-1]
 
-        # ★ 수정: 지수(^)가 수식의 맨 끝에 있을 때만 "제곱"으로 인식하도록 정교화
         last_caret = final_term.rfind('^')
         if last_caret != -1:
             after_caret = final_term[last_caret+1:].strip()
@@ -157,7 +157,6 @@ class JosaCorrector:
             
             is_end_with_exponent = False
             if after_caret_clean.startswith('{') and after_caret_clean.endswith('}'):
-                # 괄호가 완벽하게 하나의 그룹으로 끝나는지 확인
                 content, end_idx = self.get_balanced(after_caret_clean, 0)
                 if end_idx == len(after_caret_clean):
                     is_end_with_exponent = True
@@ -195,7 +194,6 @@ class JosaCorrector:
              m = re.search(r'([가-힣a-zA-Z0-9])\)+$', final_term)
              if m: return m.group(1)
 
-        # ★ 수정: \mathrm{KWh}, \text{KWh} 등 다양한 매크로 및 매크로 없는 단위(KWh) 모두 인식
         text_match = re.search(r'\\(?:mathrm|text|rm|bf|it)\{([a-zA-Z]+)\}', final_term)
         if text_match:
             unit_candidate = text_match.group(1)
@@ -263,7 +261,9 @@ class JosaCorrector:
         return original_p
 
     def clean_latex_for_human(self, latex):
-        text = re.sub(r'\\(left|right|mathrm|text|bf|it)', '', latex)
+        # ★ 수정: Report 대상 열에 출력될 때 \, \; \quad 등 공백 매크로를 깔끔하게 제거
+        text = re.sub(r'\\[,;:! ]|\\quad|\\qquad', '', latex)
+        text = re.sub(r'\\(left|right|mathrm|text|bf|it)', '', text)
         text = text.replace('{', '').replace('}', '').replace('\\', '')
         return text.strip()
 
@@ -286,12 +286,10 @@ class JosaCorrector:
             pre, s1, delim, formula, gap, particle = match.groups()
             formula_clean = formula.replace('\\\\', '\\')
             
-            # ★ 수정: 수식이 비어있거나 줄바꿈(\n), 백슬래시(\\), 공백(\quad) 등 포매팅 기호만 있는 경우 무시
             fc_stripped = formula_clean.strip()
             if not fc_stripped or fc_stripped in ['\\', '\\\\', '\\quad', '\\qquad', '\\,']:
                 return match.group(0)
                 
-            # 수식과 글자 사이에 줄바꿈이 있는 경우 무시 (새로운 문장의 시작)
             if '\n' in gap or '\r' in gap:
                 return match.group(0)
 
