@@ -24,8 +24,8 @@ class JosaCorrector:
             # 지시어 보호 패턴
             '이 점', '이 선', '이 값', '이 식', '이 경우', '이 때', '이 확률', '이 시행', '이 도형', '이 문제',
             '이 등식', '이 방정식', '이 부등식', '이 함수', '이 그래프', '이 조건',  '이 직선', '이 곡선', '이 영역',
-            '이 삼각형', '이 타원', '이 원', '이 사각형', '이 다각형', '이 구', '이 원뿔', '이 원기둥', '이 수열', 
-            '이 접선', '이 집합',
+            '이 삼각형', '이 타원', '이 원', '이 사각형', '이 다각형', '이 구', '이 원뿔', '이 원기둥', '이 수열',
+            '이 접선', '이 집합', '이 행렬',
             '그 점', '그 선', '그 값', '그 식', '그 경우', '그 때',
             '저 점', '이 배터리', '그 배터리', '저 배터리'
         ]
@@ -89,6 +89,7 @@ class JosaCorrector:
                 den_start = current.find('{', end_num)
                 _, end_den = self.get_balanced(current, den_start)
                 if num is not None:
+                    # 한국어 분수는 "분모 분의 분자"로 읽으므로 분자를 남김
                     current = current[:idx] + num + current[end_den:]
                     continue
             if '\\sqrt' in current:
@@ -137,14 +138,14 @@ class JosaCorrector:
 
         final_term = final_term.rstrip('\\').strip()
         
-        # ★ 추가 수정: 수식 끝의 닫는 괄호 기호(\vert, \rangle 등)를 제거하여 내부 수식을 타겟으로 잡도록 개선
+        # 수식 끝의 닫는 괄호 기호(\vert, \rangle 등)를 제거
         final_term = re.sub(r'(?:\\vert|\\rVert|\\rangle|\\rceil|\\rfloor|\|)+$', '', final_term).strip()
 
         if r'\end{cases}' in final_term:
             before_end = final_term.split(r'\end{cases}')[0]
             final_term = before_end.strip()
 
-        # ★ 핵심 수정: 프라임 기호 완벽 인식 (닫는 괄호 무시)
+        # 프라임 기호 완벽 인식 (닫는 괄호 무시)
         clean_term_for_prime = re.sub(r'[\}\)\]\s]+$', '', final_term)
         if re.search(r"['’]+$", clean_term_for_prime) or re.search(r",{2,}$", clean_term_for_prime) or clean_term_for_prime.endswith('prime'):
             return "프라임"
@@ -158,6 +159,8 @@ class JosaCorrector:
         if last_caret != -1:
             after_caret = final_term[last_caret+1:].strip()
             after_caret_clean = re.sub(r'[\s,;:!]+$', '', after_caret)
+            # 밑첨자/위첨자 뒤의 닫는 중괄호 무시
+            after_caret_clean = re.sub(r'(?:\\[\}])*\s*$', '', after_caret_clean)
             
             is_end_with_exponent = False
             if after_caret_clean.startswith('{') and after_caret_clean.endswith('}'):
@@ -181,7 +184,7 @@ class JosaCorrector:
                 return "제곱"
 
         if "_" in final_term:
-            # ★ 추가 수정: 수열 기호 등에서 밑첨자 뒤에 닫는 괄호(\})가 올 수 있으므로 이를 무시하도록 정규식 개선
+            # 수열 기호 등에서 밑첨자 뒤에 닫는 괄호(\})가 올 수 있으므로 무시
             sub_match = re.search(r'_\{([^}]+)\}(?:\\[\}])*\s*$', final_term)
             if sub_match:
                 content = sub_match.group(1)
@@ -208,13 +211,14 @@ class JosaCorrector:
         if m:
             unit_candidate = m.group(1)
             if unit_candidate in self.unit_batchim_dict:
-                # ★ 추가 수정: 단일 문자(m, l, g 등)는 단위가 아닌 변수일 확률이 높으므로 일반 문자로 취급
+                # 단일 문자(m, l, g 등)는 단위가 아닌 변수일 확률이 높으므로 일반 문자로 취급
                 if len(unit_candidate) > 1:
                     return f"UNIT:{unit_candidate}"
 
         text_only = re.sub(r'\\[a-zA-Z]+', '', final_term)
         text_only = text_only.replace('_', '').replace('^', '')
-        text_only = re.sub(r'[{}[\](),;:!]', '', text_only)
+        # ★ 핵심 수정: 백슬래시(\)도 제거하여 \{3\} 같은 경우 3이 올바르게 남도록 함
+        text_only = re.sub(r'[{}[\](),;:!\\]', '', text_only)
         text_only = text_only.strip()
 
         if text_only:
@@ -296,7 +300,7 @@ class JosaCorrector:
             if not fc_stripped or fc_stripped in ['\\', '\\\\', '\\quad', '\\qquad', '\\,']:
                 return match.group(0)
                 
-            # ★ 핵심 수정: \, \; \: \. 등 백슬래시가 포함된 LaTeX 명령어는 무시하지 않도록 부정 후방 탐색(?<!\\) 적용
+            # \, \; \: \. 등 백슬래시가 포함된 LaTeX 명령어는 무시하지 않도록 부정 후방 탐색(?<!\\) 적용
             if re.search(r'(?<!\\)[,.;:]+$', fc_stripped):
                 return match.group(0)
                 
