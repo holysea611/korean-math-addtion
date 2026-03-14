@@ -25,7 +25,6 @@ class JosaCorrector:
             '이 점', '이 선', '이 값', '이 식', '이 경우', '이 때', '이 확률', '이 시행', '이 도형', '이 문제',
             '이 등식', '이 방정식', '이 부등식', '이 함수', '이 그래프', '이 조건',  '이 직선', '이 곡선', '이 영역',
             '이 삼각형', '이 타원', '이 원', '이 사각형', '이 다각형', '이 구', '이 원뿔', '이 원기둥', '이 수열',
-            '이 접선', '이 집합', '이 행렬',
             '그 점', '그 선', '그 값', '그 식', '그 경우', '그 때',
             '저 점', '이 배터리', '그 배터리', '저 배터리'
         ]
@@ -37,7 +36,7 @@ class JosaCorrector:
             'L': True, 'M': True, 'N': True, 'R': True, 
             '제곱': True, '여집합': True, '바': False,
             '프라임': True,
-            # ★ 추가: 그리스 문자 발음에 따른 받침 유무 사전
+            # 그리스 문자 발음에 따른 받침 유무 사전
             'alpha': False, 'beta': False, 'gamma': False, 'delta': False, 'epsilon': True, 'varepsilon': True,
             'zeta': False, 'eta': False, 'theta': False, 'iota': False, 'kappa': False, 'lambda': False,
             'mu': False, 'nu': False, 'xi': False, 'pi': False, 'rho': False, 'sigma': False, 'tau': False,
@@ -115,10 +114,12 @@ class JosaCorrector:
         return current
 
     def find_target(self, formula_str):
-        simplified = self.simplify_formula(formula_str)
+        # ★ 핵심 수정: 불필요한 공백 및 띄어쓰기 명령어를 먼저 제거하여 괄호 구조 파악을 용이하게 함
+        formula_str = re.sub(r'\\[,;:! ]|\\quad|\\qquad', '', formula_str)
+        formula_str = re.sub(r'\s+', '', formula_str)
         
-        simplified = re.sub(r'\\[,;:! ]|\\quad|\\qquad', '', simplified)
-        clean = re.sub(r'\s+', '', simplified)
+        simplified = self.simplify_formula(formula_str)
+        clean = simplified
         
         masked_text = clean
         braces_content = []
@@ -162,7 +163,7 @@ class JosaCorrector:
         if '/' in final_term:
             final_term = final_term.split('/')[-1]
 
-        # ★ 핵심 수정: 수식 끝에 \pi, \alpha 등 그리스 문자가 올 경우 이를 타겟으로 인식
+        # 수식 끝에 \pi, \alpha 등 그리스 문자가 올 경우 이를 타겟으로 인식
         clean_final = re.sub(r'(?:\\[\}])+$', '', final_term)
         clean_final = re.sub(r'[\}\)\]]+$', '', clean_final)
         greek_match = re.search(r'\\([a-zA-Z]+)$', clean_final)
@@ -175,8 +176,8 @@ class JosaCorrector:
         if last_caret != -1:
             after_caret = final_term[last_caret+1:].strip()
             after_caret_clean = re.sub(r'[\s,;:!]+$', '', after_caret)
-            # 밑첨자/위첨자 뒤의 닫는 중괄호 무시
-            after_caret_clean = re.sub(r'(?:\\[\}])*\s*$', '', after_caret_clean)
+            # ★ 핵심 수정: 밑첨자/위첨자 뒤의 닫는 중괄호 무시 (일반 중괄호 } 포함)
+            after_caret_clean = re.sub(r'(?:\\[\}]|\})*\s*$', '', after_caret_clean)
             
             is_end_with_exponent = False
             if after_caret_clean.startswith('{') and after_caret_clean.endswith('}'):
@@ -200,8 +201,8 @@ class JosaCorrector:
                 return "제곱"
 
         if "_" in final_term:
-            # 수열 기호 등에서 밑첨자 뒤에 닫는 괄호(\})가 올 수 있으므로 무시
-            sub_match = re.search(r'_\{([^}]+)\}(?:\\[\}])*\s*$', final_term)
+            # ★ 핵심 수정: 수열 기호 등에서 밑첨자 뒤에 닫는 괄호(\} 또는 })가 올 수 있으므로 무시
+            sub_match = re.search(r'_\{([^}]+)\}(?:\\[\}]|\})*\s*$', final_term)
             if sub_match:
                 content = sub_match.group(1)
                 content = re.sub(r'\\[,;:! ]|\\quad|\\qquad', '', content)
@@ -210,7 +211,7 @@ class JosaCorrector:
                     m = re.search(r'([가-힣a-zA-Z0-9])\s*$', content)
                     if m: return m.group(1)
             
-            sub_match_simple = re.search(r'_((?:\\[a-zA-Z]+|.)*?)([a-zA-Z0-9])(?:\\[\}])*\s*$', final_term)
+            sub_match_simple = re.search(r'_((?:\\[a-zA-Z]+|.)*?)([a-zA-Z0-9])(?:\\[\}]|\})*\s*$', final_term)
             if sub_match_simple:
                 return sub_match_simple.group(2)
 
